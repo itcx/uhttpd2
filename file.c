@@ -34,6 +34,7 @@
 #include "mimetypes.h"
 
 static LIST_HEAD(index_files);
+static LIST_HEAD(mappings);
 static LIST_HEAD(dispatch_handlers);
 static LIST_HEAD(pending_requests);
 static int n_requests;
@@ -49,6 +50,14 @@ struct deferred_request {
 struct index_file {
 	struct list_head list;
 	const char *name;
+};
+
+struct url_map {
+	struct list_head list;
+	const char *src;
+	const char *dst;
+	int src_len;
+	int dst_len;
 };
 
 enum file_hdr {
@@ -68,6 +77,47 @@ void uh_index_add(const char *filename)
 	idx = calloc(1, sizeof(*idx));
 	idx->name = filename;
 	list_add_tail(&idx->list, &index_files);
+}
+
+bool uh_map_add(char *mapping)
+{
+	struct url_map *map;
+
+	if (mapping[0] != '/' || !strchr(mapping, ':'))
+		return false;
+	map = calloc(1, sizeof(*map));
+	map->src = strtok(mapping, ":");
+	map->dst = strtok(NULL, ":");
+	map->src_len = strlen(map->src);
+	map->dst_len = strlen(map->dst);
+	list_add_tail(&map->list, &mappings);
+	return true;
+}
+
+static char * uh_map_apply(struct client *cl)
+{
+	struct url_map *map;
+	char *url = blobmsg_data(blob_data(cl->hdr.head));
+	int url_len = strlen(url);
+
+	list_for_each_entry(map, &mappings, list) {
+		if (!strncmp(url, map->src, map->src_len)) {
+			int len_diff = map->dst_len - map->src_len;
+			char *url_rest;
+			if (len_diff > 0) {
+				if (!blob_buf_grow(&cl->hdr, url_len + len_diff))
+					goto out;
+				url = blobmsg_data(blob_data(cl->hdr.head));
+			}
+			url_rest = url + map->src_len;
+			/* move the rest of the url, including nul terminator */
+			memmove(url_rest + len_diff, url_rest, strlen(url_rest) + 1);
+			/* replace first part of the url with dst string */
+			memcpy(url, map->dst, map->dst_len);
+		}
+	}
+out:
+	return url;
 }
 
 static char * canonpath(const char *path, char *path_resolved)
@@ -819,6 +869,10 @@ void uh_handle_request(struct client *cl)
 	char *error_handler;
 
 	req->redirect_status = 200;
+
+	/* jjo */
+	url = uh_map_apply(cl);
+
 	d = dispatch_find(url, NULL);
 	if (d)
 		return uh_invoke_handler(cl, d, url, NULL);

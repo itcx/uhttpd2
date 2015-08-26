@@ -84,6 +84,8 @@ enum http_method {
 	UH_HTTP_MSG_POST,
 	UH_HTTP_MSG_HEAD,
 	UH_HTTP_MSG_OPTIONS,
+	UH_HTTP_MSG_DELETE,
+	UH_HTTP_MSG_PUT,
 };
 
 enum http_version {
@@ -261,6 +263,7 @@ extern const char * const http_methods[];
 extern struct dispatch_handler cgi_dispatch;
 
 void uh_index_add(const char *filename);
+bool uh_map_add(char *mapping);
 
 bool uh_accept_client(int fd, bool tls);
 

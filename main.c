@@ -139,6 +139,7 @@ static int usage(const char *name)
 		"	-h directory    Specify the document root, default is '.'\n"
 		"	-E string       Use given virtual URL as 404 error handler\n"
 		"	-I string       Use given filename as index for directories, multiple allowed\n"
+		"	-M string       Use string as '/src:/dst' url path mapping, multiple allowed\n"
 		"	-S              Do not follow symbolic links outside of the docroot\n"
 		"	-D              Do not allow directory listings, send 403 instead\n"
 		"	-R              Enable RFC1918 filter\n"
@@ -228,7 +229,7 @@ int main(int argc, char **argv)
 	init_defaults_pre();
 	signal(SIGPIPE, SIG_IGN);
 
-	while ((ch = getopt(argc, argv, "afqSDRXC:K:E:I:p:s:h:c:l:L:d:r:m:n:N:x:i:t:k:T:A:u:U:")) != -1) {
+	while ((ch = getopt(argc, argv, "afqSDRXC:K:E:I:M:p:s:h:c:l:L:d:r:m:n:N:x:i:t:k:T:A:u:U:")) != -1) {
 		switch(ch) {
 #ifdef HAVE_TLS
 		case 'C':
@@ -285,6 +286,14 @@ int main(int argc, char **argv)
 				exit(1);
 			}
 			uh_index_add(optarg);
+			break;
+
+		case 'M':
+			if (!uh_map_add(optarg)) {
+				fprintf(stderr, "Error: mapping string %s\n",
+						optarg);
+				exit(1);
+			}
 			break;
 
 		case 'S':
