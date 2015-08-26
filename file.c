@@ -86,6 +86,7 @@ bool uh_map_add(char *mapping)
 	if (mapping[0] != '/' || !strchr(mapping, ':'))
 		return false;
 	map = calloc(1, sizeof(*map));
+	mapping = strdup(mapping);
 	map->src = strtok(mapping, ":");
 	map->dst = strtok(NULL, ":");
 	map->src_len = strlen(map->src);
