@@ -29,6 +29,15 @@ static bool client_done = false;
 int n_clients = 0;
 struct config conf = {};
 
+struct url_map {
+	struct list_head list;
+	const char *orig;
+	const char *repl;
+	int orig_len;
+	int repl_len;
+};
+
+
 const char * const http_versions[] = {
 	[UH_HTTP_VER_0_9] = "HTTP/0.9",
 	[UH_HTTP_VER_1_0] = "HTTP/1.0",
@@ -151,6 +160,54 @@ static void uh_header_error(struct client *cl, int code, const char *summary)
 	uh_connection_close(cl);
 }
 
+static LIST_HEAD(mappings);
+static void uh_map_add_url(struct client *cl, char *path)
+{
+	struct url_map *map;
+	int path_len = strlen(path);
+	char *path_new;
+
+	list_for_each_entry(map, &mappings, list) {
+		if (!strncmp(path, map->orig, map->orig_len)) {
+			int len_diff = map->repl_len - map->orig_len;
+			char *path_rest_orig = path + map->orig_len;
+			if (len_diff > 0) {
+				path_new = alloca(path_len + len_diff + 1);
+				if (!path_new)
+					goto out;
+				path = path_new;
+			}
+			char *path_rest_repl = path + map->repl_len;
+			/* move the rest of the path, including nul terminator */
+			memmove(path_rest_repl, path_rest_orig, strlen(path_rest_orig) + 1);
+			/* replace first part of the url with repl string */
+			memcpy(path, map->repl, map->repl_len);
+			/* 1st match wins */
+			goto out;
+		}
+	}
+out:
+	blobmsg_add_string(&cl->hdr, "URL", path);
+}
+
+bool uh_map_add(char *mapping)
+{
+	struct url_map *map;
+
+	if (mapping[0] != '/' || !strchr(mapping, ':'))
+		return false;
+	map = calloc(1, sizeof(*map));
+	mapping = strdup(mapping);
+	map->orig = strtok(mapping, ":");
+	map->repl = strtok(NULL, ":");
+	map->orig_len = strlen(map->orig);
+	map->repl_len = strlen(map->repl);
+	list_add_tail(&map->list, &mappings);
+	return true;
+}
+
+
+
 static int find_idx(const char * const *list, int max, const char *str)
 {
 	int i;
@@ -174,7 +231,8 @@ static int client_parse_request(struct client *cl, char *data)
 	if (!type || !path || !version)
 		return CLIENT_STATE_DONE;
 
-	blobmsg_add_string(&cl->hdr, "URL", path);
+	/* jjo */
+	uh_map_add_url(cl, path);
 
 	memset(&cl->request, 0, sizeof(cl->request));
 	h_method = find_idx(http_methods, ARRAY_SIZE(http_methods), type);
